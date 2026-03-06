@@ -1,50 +1,147 @@
-# Welcome to your Expo app 👋
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+# StockClock
 
-## Get started
+StockClock is a mobile stock tracking app built with Expo and React Native for CS178.
+It focuses on stock watchlists, price alerts, stock detail charts, and a placeholder AI news module for future FinBERT integration.
 
-1. Install dependencies
+## Current Features
 
-   ```bash
-   npm install
-   ```
+- Real stock symbol search
+- Watchlist management
+- Real stock quote fetching
+- Stock detail page with chart
+- Alert creation and management
+- Demo alert trigger mode for presentation
+- News placeholder page for future sentiment/news integration
+- Dark/light theme support
 
-2. Start the app
+## Tech Stack
 
-   ```bash
-   npx expo start
-   ```
+- Expo
+- React Native
+- Expo Router
+- TypeScript
+- Twelve Data API
+- react-native-svg
 
-In the output, you'll find options to open the app in a
+## Project Structure
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```
+app/            Main screens and routes
+components/     Shared UI components
+constants/      Theme and app constants
+hooks/          Custom hooks
+services/       API and data logic
+assets/         Images and static assets
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Requirements
 
-## Learn more
+Before running the project, make sure you have:
 
-To learn more about developing your project with Expo, look at the following resources:
+- Node.js installed
+- npm installed
+- Expo Go installed on your phone
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Expo Go is used for quick testing and demo during development.
 
-## Join the community
+## Setup
 
-Join our community of developers creating universal apps.
+### 1. Clone the repository
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```
+git clone https://github.com/PYwaterfriend/stockclock.git
+cd stockclock
+```
+
+### 2. Install dependencies
+
+```
+npm install
+```
+
+### 3. Install required Expo package
+
+```
+npx expo install react-native-svg
+```
+
+### 4. Add your Twelve Data API key
+
+Open:
+
+```
+services/marketData.ts
+```
+
+Replace the API key placeholder with your own Twelve Data API key.
+
+Example:
+
+```ts
+export const TWELVE_DATA_API_KEY = "YOUR_API_KEY_HERE";
+```
+
+Each teammate should create their own free Twelve Data account and use their own API key.
+
+## Running the App
+
+Start the project with:
+
+```
+npx expo start
+```
+
+Then:
+
+- Scan the QR code using Expo Go on your phone
+- Or run in a simulator if available
+
+## Alert Demo Mode
+
+The Alerts page includes a demo mode so alerts can be triggered during presentation without waiting for real market prices.
+
+## News Module
+
+The News tab is currently a placeholder.  
+It will later connect to AI news analysis or FinBERT sentiment output from the backend.
+
+## Troubleshooting
+
+### Expo does not refresh correctly
+
+```
+npx expo start -c
+```
+
+### API data does not appear
+
+Check:
+
+- API key is correctly set in `services/marketData.ts`
+- API limit has not been exceeded
+
+### Dependency issues
+
+Try reinstalling:
+
+```
+rm -rf node_modules package-lock.json
+npm install
+```
+
+On Windows you may need to delete `node_modules` manually.
+
+## Repository Usage
+
+Do not commit:
+
+- API keys
+- node_modules
+- .expo
+- local editor settings
+
+## Team Project
+
+CS178 Mobile App Project  
+StockClock
