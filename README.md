@@ -11,19 +11,19 @@ integration.
 
 ### Home
 
-`<img src="screenshots/home.PNG" width="300"/>`{=html}
+<img src="screenshots/home.PNG" width="300"/>
 
 ### Stock Detail
 
-`<img src="screenshots/stock.PNG" width="300"/>`{=html}
+<img src="screenshots/stock.PNG" width="300"/>
 
 ### Alerts
 
-`<img src="screenshots/alerts.PNG" width="300"/>`{=html}
+<img src="screenshots/alerts.PNG" width="300"/>
 
 ### News
 
-`<img src="screenshots/news.PNG" width="300"/>`{=html}
+<img src="screenshots/news.PNG" width="300"/>
 
 ------------------------------------------------------------------------
 
