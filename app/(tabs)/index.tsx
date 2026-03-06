@@ -1,98 +1,382 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useContext, useEffect, useMemo, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ScrollView,
+  TextInput,
+} from "react-native";
+import { useRouter } from "expo-router";
+import { AlertsContext, ThemeContext, WatchlistContext, type AlertItem } from "../_layout";
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+type MarketPhase = "Closed" | "Pre-market" | "Open" | "After-hours";
+
+function pad2(n: number) {
+  return n < 10 ? `0${n}` : `${n}`;
+}
+
+function fmtHms(ms: number) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const hh = Math.floor(s / 3600);
+  const mm = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  if (hh > 0) return `${hh}:${pad2(mm)}:${pad2(ss)}`;
+  return `${mm}:${pad2(ss)}`;
+}
+
+/**
+ * US market hours in America/Los_Angeles, ignoring holidays (good enough for demo).
+ * Pre: 01:00-06:30
+ * Regular: 06:30-13:00
+ * After: 13:00-17:00
+ */
+function getUsMarketStatus(now: Date) {
+  const day = now.getDay(); // 0=Sun, 6=Sat
+  if (day === 0 || day === 6) {
+    const daysToMon = day === 0 ? 1 : 2;
+    const next = new Date(now);
+    next.setDate(now.getDate() + daysToMon);
+    next.setHours(1, 0, 0, 0);
+    return { phase: "Closed" as MarketPhase, label: "Closed (Weekend)", nextChangeAt: next };
+  }
+
+  const mins = now.getHours() * 60 + now.getMinutes();
+  const preStart = 1 * 60 + 0;
+  const regStart = 6 * 60 + 30;
+  const regEnd = 13 * 60 + 0;
+  const afterEnd = 17 * 60 + 0;
+
+  const at = (h: number, m: number) => {
+    const d = new Date(now);
+    d.setHours(h, m, 0, 0);
+    return d;
+  };
+
+  if (mins >= preStart && mins < regStart) return { phase: "Pre-market" as MarketPhase, label: "Pre-market", nextChangeAt: at(6, 30) };
+  if (mins >= regStart && mins < regEnd) return { phase: "Open" as MarketPhase, label: "Open", nextChangeAt: at(13, 0) };
+  if (mins >= regEnd && mins < afterEnd) return { phase: "After-hours" as MarketPhase, label: "After-hours", nextChangeAt: at(17, 0) };
+
+  // Closed weekday
+  const next = mins < preStart ? at(1, 0) : (() => {
+    const d = new Date(now);
+    d.setDate(now.getDate() + 1);
+    d.setHours(1, 0, 0, 0);
+    return d;
+  })();
+
+  return { phase: "Closed" as MarketPhase, label: "Closed", nextChangeAt: next };
+}
+
+function badgeForPhase(phase: MarketPhase) {
+  if (phase === "Open") return { bg: "rgba(52, 199, 89, 0.18)", text: "Open" };
+  if (phase === "Pre-market") return { bg: "rgba(10, 132, 255, 0.18)", text: "Pre-market" };
+  if (phase === "After-hours") return { bg: "rgba(255, 149, 0, 0.18)", text: "After-hours" };
+  return { bg: "rgba(255, 255, 255, 0.10)", text: "Closed" };
+}
+
+function fmtRule(rule: AlertItem["rule"]) {
+  return rule === "ABOVE" ? "Above" : "Below";
+}
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const router = useRouter();
+  const { colors, resolvedScheme } = useContext(ThemeContext);
+  const { watchlist } = useContext(WatchlistContext);
+  const { alerts } = useContext(AlertsContext);
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  const [now, setNow] = useState(new Date());
+  const [quickSymbol, setQuickSymbol] = useState("");
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const timeStr = useMemo(() => now.toLocaleString(), [now]);
+
+  const market = useMemo(() => getUsMarketStatus(now), [now]);
+  const badge = useMemo(() => badgeForPhase(market.phase), [market.phase]);
+  const countdown = useMemo(() => fmtHms(market.nextChangeAt.getTime() - now.getTime()), [market.nextChangeAt, now]);
+
+  const activeAlerts = useMemo(() => alerts.filter((a) => a.enabled).length, [alerts]);
+  const recentAlerts = useMemo(() => alerts.slice(0, 2), [alerts]);
+  const topWatch = useMemo(() => watchlist.slice(0, 6), [watchlist]);
+
+  const onCreateAlert = (sym?: string) => {
+    const s = (sym ?? quickSymbol).trim().toUpperCase();
+    if (!s) return;
+    setQuickSymbol("");
+    router.push({ pathname: "/alert/create", params: { symbol: s } });
+  };
+
+  return (
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Header */}
+        <View style={styles.header}>
+          <View>
+            <Text style={[styles.appName, { color: colors.text }]}>StockClock</Text>
+            <Text style={[styles.time, { color: colors.subtext }]}>{timeStr}</Text>
+          </View>
+
+          <Pressable
+            style={[styles.pill, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push("/(tabs)/settings")}
+          >
+            <Text style={[styles.pillText, { color: colors.subtext }]}>
+              Theme: {resolvedScheme === "dark" ? "Dark" : "Light"}
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* Market card */}
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.cardRow}>
+            <Text style={[styles.cardTitle, { color: colors.subtext }]}>Market</Text>
+            <View style={[styles.badge, { backgroundColor: badge.bg }]}>
+              <Text style={[styles.badgeText, { color: colors.text }]}>{badge.text}</Text>
+            </View>
+          </View>
+
+          <Text style={[styles.marketMain, { color: colors.text }]}>{market.label}</Text>
+
+          <View style={styles.cardRow}>
+            <Text style={[styles.meta, { color: colors.subtext }]}>
+              Next change in <Text style={{ color: colors.text, fontWeight: "700" }}>{countdown}</Text>
+            </Text>
+            <Text style={[styles.meta, { color: colors.subtext }]}>
+              {market.nextChangeAt.toLocaleTimeString()}
+            </Text>
+          </View>
+
+          <View style={styles.quickActionsRow}>
+            <Pressable
+              style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+              onPress={() => router.push("/(tabs)/explore")}
+            >
+              <Text style={[styles.actionBtnText, { color: colors.text }]}>Stocks</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+              onPress={() => router.push("/(tabs)/alerts")}
+            >
+              <Text style={[styles.actionBtnText, { color: colors.text }]}>Alerts</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.actionBtnPrimary, { backgroundColor: colors.tint }]}
+              onPress={() => onCreateAlert()}
+            >
+              <Text style={[styles.actionBtnPrimaryText, { color: "#fff" }]}>New Alert</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Quick create */}
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.cardTitle, { color: colors.subtext }]}>Quick alert</Text>
+
+          <View style={styles.quickCreateRow}>
+            <TextInput
+              value={quickSymbol}
+              onChangeText={setQuickSymbol}
+              placeholder="Symbol (e.g. AAPL)"
+              placeholderTextColor={resolvedScheme === "dark" ? "rgba(255,255,255,0.35)" : "rgba(17,24,39,0.35)"}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              style={[
+                styles.input,
+                {
+                  color: colors.text,
+                  borderColor: colors.border,
+                  backgroundColor: resolvedScheme === "dark" ? "rgba(255,255,255,0.06)" : "#f3f4f6",
+                },
+              ]}
+            />
+            <Pressable style={[styles.goBtn, { backgroundColor: colors.tint }]} onPress={() => onCreateAlert()}>
+              <Text style={styles.goBtnText}>Go</Text>
+            </Pressable>
+          </View>
+
+          <Text style={[styles.hint, { color: colors.subtext }]}>
+            This opens the create page with the symbol prefilled.
+          </Text>
+        </View>
+
+        {/* Watchlist preview */}
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.cardRow}>
+            <Text style={[styles.cardTitle, { color: colors.subtext }]}>Watchlist</Text>
+            <Text style={[styles.meta, { color: colors.subtext }]}>{watchlist.length} symbols</Text>
+          </View>
+
+          {topWatch.length === 0 ? (
+            <Text style={[styles.emptyLine, { color: colors.subtext }]}>
+              No watchlist symbols yet. Add from Stocks.
+            </Text>
+          ) : (
+            <View style={styles.chipsWrap}>
+              {topWatch.map((sym) => (
+                <Pressable
+                  key={sym}
+                  style={[styles.chip, { borderColor: colors.border, backgroundColor: resolvedScheme === "dark" ? "rgba(255,255,255,0.06)" : "#f3f4f6" }]}
+                  onPress={() => router.push(`/stock/${sym}`)}
+                >
+                  <Text style={[styles.chipText, { color: colors.text }]}>{sym}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          <View style={styles.subActionsRow}>
+            <Pressable
+              style={[styles.linkBtn, { borderColor: colors.border }]}
+              onPress={() => router.push("/(tabs)/explore")}
+            >
+              <Text style={[styles.linkBtnText, { color: colors.text }]}>Manage watchlist</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Alerts summary */}
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.cardRow}>
+            <Text style={[styles.cardTitle, { color: colors.subtext }]}>Alerts</Text>
+            <Text style={[styles.meta, { color: colors.subtext }]}>{activeAlerts} active</Text>
+          </View>
+
+          {alerts.length === 0 ? (
+            <Text style={[styles.emptyLine, { color: colors.subtext }]}>
+              No alerts yet. Create one from Alerts or Quick alert above.
+            </Text>
+          ) : (
+            <View style={{ marginTop: 10, gap: 10 }}>
+              {recentAlerts.map((a) => (
+                <Pressable
+                  key={a.id}
+                  style={[styles.miniRow, { borderColor: colors.border, backgroundColor: resolvedScheme === "dark" ? "rgba(255,255,255,0.06)" : "#f3f4f6" }]}
+                  onPress={() => router.push(`/alert/${a.id}`)}
+                >
+                  <View>
+                    <Text style={[styles.miniTitle, { color: colors.text }]}>{a.symbol}</Text>
+                    <Text style={[styles.miniSub, { color: colors.subtext }]}>
+                      {fmtRule(a.rule)} ${a.target.toFixed(2)} · {a.enabled ? "Enabled" : "Disabled"}
+                    </Text>
+                  </View>
+
+                  <Text style={[styles.miniCta, { color: colors.tint }]}>Edit</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          <View style={styles.subActionsRow}>
+            <Pressable style={[styles.linkBtn, { borderColor: colors.border }]} onPress={() => router.push("/(tabs)/alerts")}>
+              <Text style={[styles.linkBtnText, { color: colors.text }]}>Open Alerts</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Small footer note */}
+        <View style={{ paddingHorizontal: 4, paddingTop: 2, paddingBottom: 28 }}>
+          <Text style={[styles.footerNote, { color: colors.subtext }]}>
+            Demo note: market hours ignore US holidays. Data is stored locally on device.
+          </Text>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: { flex: 1 },
+  content: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 18, gap: 14 },
+
+  header: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 },
+  appName: { fontSize: 34, fontWeight: "800", letterSpacing: -0.5 },
+  time: { marginTop: 6, fontSize: 15 },
+
+  pill: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  pillText: { fontSize: 13, fontWeight: "600" },
+
+  card: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  cardRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  cardTitle: { fontSize: 14, fontWeight: "700" },
+
+  badge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  badgeText: { fontSize: 12, fontWeight: "800" },
+
+  marketMain: { marginTop: 10, fontSize: 22, fontWeight: "800", letterSpacing: -0.2 },
+  meta: { fontSize: 13, fontWeight: "600" },
+
+  quickActionsRow: { flexDirection: "row", gap: 10, marginTop: 14 },
+  actionBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
   },
+  actionBtnText: { fontSize: 14, fontWeight: "800" },
+  actionBtnPrimary: { flex: 1, borderRadius: 12, paddingVertical: 12, alignItems: "center" },
+  actionBtnPrimaryText: { fontSize: 14, fontWeight: "900" },
+
+  quickCreateRow: { flexDirection: "row", gap: 10, marginTop: 10, alignItems: "center" },
+  input: {
+    flex: 1,
+    height: 46,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  goBtn: { height: 46, paddingHorizontal: 16, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  goBtnText: { color: "#fff", fontSize: 15, fontWeight: "900" },
+  hint: { marginTop: 10, fontSize: 12, lineHeight: 16 },
+
+  chipsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12 },
+  chip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  chipText: { fontSize: 14, fontWeight: "900" },
+
+  emptyLine: { marginTop: 10, fontSize: 13, lineHeight: 18 },
+
+  miniRow: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    
+  },
+  miniTitle: { fontSize: 15, fontWeight: "900" },
+  miniSub: { marginTop: 4, fontSize: 12, fontWeight: "600" },
+  miniCta: { fontSize: 13, fontWeight: "900" },
+
+  subActionsRow: { marginTop: 14, flexDirection: "row", justifyContent: "flex-end" },
+  linkBtn: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  linkBtnText: { fontSize: 13, fontWeight: "800" },
+
+  footerNote: { fontSize: 12, lineHeight: 16, textAlign: "center" },
 });

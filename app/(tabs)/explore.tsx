@@ -1,112 +1,164 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useContext, useEffect, useMemo, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  Pressable,
+  RefreshControl,
+} from "react-native";
+import { useRouter } from "expo-router";
+import { WatchlistContext, ThemeContext } from "../_layout";
+import { fetchQuotes, hasConfiguredApiKey, type QuoteData } from "../../services/marketData";
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+type RowData = QuoteData & { symbol: string };
 
-export default function TabTwoScreen() {
+function fmtPct(x: number) {
+  const sign = x > 0 ? "+" : "";
+  return `${sign}${x.toFixed(2)}%`;
+}
+
+function fmtMoney(x: number) {
+  return x > 0 ? `$${x.toFixed(2)}` : "--";
+}
+
+export default function StocksScreen() {
+  const router = useRouter();
+  const { watchlist } = useContext(WatchlistContext);
+  const { colors } = useContext(ThemeContext);
+
+  const [quotes, setQuotes] = useState<Record<string, QuoteData>>({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadQuotes = async () => {
+    if (watchlist.length === 0) return;
+    setLoading(true);
+    setError("");
+    try {
+      const next = await fetchQuotes(watchlist);
+      setQuotes(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load quotes.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+//  useEffect(() => {
+//    loadQuotes();
+//  }, [watchlist.join(",")]);
+
+  const data = useMemo<RowData[]>(() => {
+    return watchlist.map((symbol) => quotes[symbol] ?? { symbol, close: 0, change: 0, percentChange: 0 });
+  }, [watchlist, quotes]);
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
+      <View style={styles.headerRow}>
+        <Text style={[styles.title, { color: colors.text }]}>Watchlist</Text>
+        <Pressable
+          style={[styles.refreshBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
+          onPress={loadQuotes}
+        >
+          <Text style={[styles.refreshText, { color: colors.text }]}>Refresh</Text>
+        </Pressable>
+      </View>
+
+      {!hasConfiguredApiKey() && (
+        <View style={[styles.notice, { borderColor: colors.border, backgroundColor: colors.card }]}>
+          <Text style={[styles.noticeText, { color: colors.subtext }]}>
+            Add your Twelve Data API key in services/marketData.ts to load real stock prices.
+          </Text>
+        </View>
+      )}
+
+      {!!error && <Text style={[styles.error, { color: colors.danger }]}>{error}</Text>}
+
+      <FlatList
+        data={data}
+        keyExtractor={(it) => it.symbol}
+        ItemSeparatorComponent={() => <View style={styles.sep} />}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={loadQuotes} />}
+        renderItem={({ item }) => {
+          const up = item.percentChange >= 0;
+          return (
+            <Pressable
+              style={[styles.row, { borderColor: colors.border, backgroundColor: colors.card }]}
+              onPress={() => router.push(`/stock/${item.symbol}`)}
+            >
+              <View>
+                <Text style={[styles.symbol, { color: colors.text }]}>{item.symbol}</Text>
+                <Text style={[styles.sub, { color: colors.subtext }]}>Tap to open details</Text>
+              </View>
+
+              <View style={styles.right}>
+                <Text style={[styles.price, { color: colors.text }]}>{fmtMoney(item.close)}</Text>
+                <Text style={[styles.change, { color: up ? "#34c759" : colors.danger }]}>
+                  {fmtPct(item.percentChange)}
+                </Text>
+              </View>
+            </Pressable>
+          );
+        }}
+        ListEmptyComponent={
+          <Text style={{ marginTop: 20, color: colors.subtext }}>
+            No stocks yet. Tap “Add Stock”.
+          </Text>
+        }
+      />
+
+      <Pressable
+        style={[styles.addBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
+        onPress={() => router.push("/add-stock")}
+      >
+        <Text style={[styles.addText, { color: colors.text }]}>Add Stock</Text>
+      </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+  container: { flex: 1, padding: 20, paddingTop: 60 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  title: { fontSize: 28, fontWeight: "800", marginBottom: 16 },
+  refreshBtn: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 16,
   },
-  titleContainer: {
-    flexDirection: 'row',
-    gap: 8,
+  refreshText: { fontSize: 13, fontWeight: "700" },
+  notice: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 12,
   },
+  noticeText: { fontSize: 12, lineHeight: 18 },
+  error: { marginBottom: 12, fontSize: 13, fontWeight: "600" },
+  row: {
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  symbol: { fontSize: 18, fontWeight: "800" },
+  sub: { marginTop: 4, fontSize: 12 },
+  right: { alignItems: "flex-end" },
+  price: { fontSize: 16, fontWeight: "700" },
+  change: { marginTop: 4, fontSize: 14, fontWeight: "700" },
+  sep: { height: 10 },
+  addBtn: {
+    marginTop: 16,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: "center",
+    borderWidth: 1,
+  },
+  addText: { fontSize: 16, fontWeight: "800" },
 });
