@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useState } from "react";
+import React, { useContext, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -6,16 +6,22 @@ import {
   FlatList,
   Pressable,
   RefreshControl,
+  Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { WatchlistContext, ThemeContext } from "../_layout";
 import { fetchQuotes, hasConfiguredApiKey, type QuoteData } from "../../services/marketData";
 
-type RowData = QuoteData & { symbol: string };
+type RowData = QuoteData & { symbol: string; name?: string };
 
 function fmtPct(x: number) {
   const sign = x > 0 ? "+" : "";
   return `${sign}${x.toFixed(2)}%`;
+}
+
+function fmtDelta(x: number) {
+  const sign = x > 0 ? "+" : x < 0 ? "-" : "";
+  return `${sign}$${Math.abs(x).toFixed(2)}`;
 }
 
 function fmtMoney(x: number) {
@@ -24,8 +30,8 @@ function fmtMoney(x: number) {
 
 export default function StocksScreen() {
   const router = useRouter();
-  const { watchlist } = useContext(WatchlistContext);
-  const { colors } = useContext(ThemeContext);
+  const { watchlist, removeSymbol } = useContext(WatchlistContext);
+  const { colors, resolvedScheme } = useContext(ThemeContext);
 
   const [quotes, setQuotes] = useState<Record<string, QuoteData>>({});
   const [loading, setLoading] = useState(false);
@@ -45,73 +51,132 @@ export default function StocksScreen() {
     }
   };
 
-//  useEffect(() => {
-//    loadQuotes();
-//  }, [watchlist.join(",")]);
-
   const data = useMemo<RowData[]>(() => {
-    return watchlist.map((symbol) => quotes[symbol] ?? { symbol, close: 0, change: 0, percentChange: 0 });
+    return watchlist.map((symbol) => quotes[symbol] ?? { symbol, name: undefined, close: 0, change: 0, percentChange: 0 });
   }, [watchlist, quotes]);
 
+  const confirmRemove = (symbol: string) => {
+    Alert.alert(
+      "Remove from watchlist?",
+      `${symbol} will be removed from your watchlist.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => removeSymbol(symbol),
+        },
+      ]
+    );
+  };
+
+  const positiveColor = resolvedScheme === "dark" ? "#4ade80" : "#16a34a";
+  const negativeColor = colors.danger;
+  const mutedBg = resolvedScheme === "dark" ? "#10151c" : "#f8fafc";
+  const lineColor = resolvedScheme === "dark" ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.09)";
+
   return (
-    <View style={[styles.container, { backgroundColor: colors.bg }]}>
+    <View style={[styles.container, { backgroundColor: colors.bg }]}> 
       <View style={styles.headerRow}>
-        <Text style={[styles.title, { color: colors.text }]}>Watchlist</Text>
+        <View>
+          <Text style={[styles.eyebrow, { color: colors.subtext }]}>Markets</Text>
+          <Text style={[styles.title, { color: colors.text }]}>Watchlist</Text>
+        </View>
+
         <Pressable
-          style={[styles.refreshBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
+          style={({ pressed }) => [
+            styles.refreshBtn,
+            {
+              borderColor: colors.border,
+              backgroundColor: colors.card,
+              opacity: pressed ? 0.78 : 1,
+            },
+          ]}
           onPress={loadQuotes}
         >
-          <Text style={[styles.refreshText, { color: colors.text }]}>Refresh</Text>
+          <Text style={[styles.refreshIcon, { color: colors.text }]}>↻</Text>
         </Pressable>
       </View>
 
       {!hasConfiguredApiKey() && (
-        <View style={[styles.notice, { borderColor: colors.border, backgroundColor: colors.card }]}>
-          <Text style={[styles.noticeText, { color: colors.subtext }]}>
-            Add your Twelve Data API key in services/marketData.ts to load real stock prices.
+        <View style={[styles.notice, { borderColor: colors.border, backgroundColor: mutedBg }]}> 
+          <Text style={[styles.noticeTitle, { color: colors.text }]}>Market data setup needed</Text>
+          <Text style={[styles.noticeText, { color: colors.subtext }]}> 
+            Add your Twelve Data API key in services/marketData.ts to load live quotes.
           </Text>
         </View>
       )}
 
       {!!error && <Text style={[styles.error, { color: colors.danger }]}>{error}</Text>}
 
+      <View style={[styles.tableHead, { borderBottomColor: lineColor }]}> 
+        <Text style={[styles.tableHeadText, { color: colors.subtext }]}>Symbol</Text>
+        <Text style={[styles.tableHeadText, styles.tableHeadRight, { color: colors.subtext }]}>Last / Change</Text>
+      </View>
+
       <FlatList
         data={data}
         keyExtractor={(it) => it.symbol}
-        ItemSeparatorComponent={() => <View style={styles.sep} />}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={data.length === 0 ? styles.emptyContainer : styles.listContent}
+        ItemSeparatorComponent={() => <View style={[styles.sep, { backgroundColor: lineColor }]} />}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={loadQuotes} />}
         renderItem={({ item }) => {
           const up = item.percentChange >= 0;
+          const moveColor = up ? positiveColor : negativeColor;
           return (
             <Pressable
-              style={[styles.row, { borderColor: colors.border, backgroundColor: colors.card }]}
+              style={({ pressed }) => [
+                styles.row,
+                {
+                  backgroundColor: pressed ? colors.card : "transparent",
+                },
+              ]}
               onPress={() => router.push(`/stock/${item.symbol}`)}
+              onLongPress={() => confirmRemove(item.symbol)}
+              delayLongPress={260}
             >
-              <View>
+              <View style={styles.leftBlock}>
                 <Text style={[styles.symbol, { color: colors.text }]}>{item.symbol}</Text>
-                <Text style={[styles.sub, { color: colors.subtext }]}>Tap to open details</Text>
+                {!!item.name && (
+                  <Text
+                    style={[styles.companyName, { color: colors.subtext }]}
+                    numberOfLines={1}
+                  >
+                    {item.name}
+                  </Text>
+                )}
               </View>
 
               <View style={styles.right}>
                 <Text style={[styles.price, { color: colors.text }]}>{fmtMoney(item.close)}</Text>
-                <Text style={[styles.change, { color: up ? "#34c759" : colors.danger }]}>
-                  {fmtPct(item.percentChange)}
+                <Text style={[styles.changeText, { color: moveColor }]}>
+                  {fmtDelta(item.change)} ({fmtPct(item.percentChange)})
                 </Text>
               </View>
             </Pressable>
           );
         }}
         ListEmptyComponent={
-          <Text style={{ marginTop: 20, color: colors.subtext }}>
-            No stocks yet. Tap “Add Stock”.
-          </Text>
+          <View style={[styles.emptyCard, { borderColor: colors.border, backgroundColor: colors.card }]}> 
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>Your watchlist is empty</Text>
+            <Text style={[styles.emptyText, { color: colors.subtext }]}>Add a few symbols to start tracking prices here.</Text>
+          </View>
         }
       />
 
       <Pressable
-        style={[styles.addBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
+        style={({ pressed }) => [
+          styles.addBtn,
+          {
+            borderColor: colors.border,
+            backgroundColor: colors.card,
+            opacity: pressed ? 0.88 : 1,
+          },
+        ]}
         onPress={() => router.push("/add-stock")}
       >
+        <Text style={[styles.addPlus, { color: colors.text }]}>＋</Text>
         <Text style={[styles.addText, { color: colors.text }]}>Add Stock</Text>
       </Pressable>
     </View>
@@ -119,46 +184,131 @@ export default function StocksScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, paddingTop: 60 },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  title: { fontSize: 28, fontWeight: "800", marginBottom: 16 },
-  refreshBtn: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 16,
-  },
-  refreshText: { fontSize: 13, fontWeight: "700" },
-  notice: {
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 12,
-  },
-  noticeText: { fontSize: 12, lineHeight: 18 },
-  error: { marginBottom: 12, fontSize: 13, fontWeight: "600" },
-  row: {
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 1,
+  container: { flex: 1, paddingHorizontal: 20, paddingTop: 58, paddingBottom: 20 },
+  headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginBottom: 18,
   },
-  symbol: { fontSize: 18, fontWeight: "800" },
-  sub: { marginTop: 4, fontSize: 12 },
-  right: { alignItems: "flex-end" },
-  price: { fontSize: 16, fontWeight: "700" },
-  change: { marginTop: 4, fontSize: 14, fontWeight: "700" },
-  sep: { height: 10 },
-  addBtn: {
-    marginTop: 16,
-    paddingVertical: 14,
+  eyebrow: {
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+    marginBottom: 6,
+  },
+  title: { fontSize: 30, fontWeight: "800", letterSpacing: -0.6 },
+  refreshBtn: {
+    width: 42,
+    height: 42,
+    borderWidth: 1,
     borderRadius: 14,
     alignItems: "center",
-    borderWidth: 1,
+    justifyContent: "center",
   },
+  refreshIcon: { fontSize: 18, fontWeight: "700" },
+  notice: {
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 14,
+  },
+  noticeTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  noticeText: { fontSize: 12, lineHeight: 18 },
+  error: { marginBottom: 12, fontSize: 13, fontWeight: "600" },
+  tableHead: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingBottom: 10,
+    marginBottom: 2,
+    borderBottomWidth: 1,
+  },
+  tableHeadText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  tableHeadRight: {
+    textAlign: "right",
+  },
+  listContent: {
+    paddingBottom: 10,
+  },
+  row: {
+    minHeight: 74,
+    paddingVertical: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderRadius: 12,
+  },
+  leftBlock: {
+    flex: 1,
+    paddingRight: 12,
+    justifyContent: "center",
+  },
+  symbol: {
+    fontSize: 21,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+  companyName: {
+    marginTop: 3,
+    fontSize: 12.5,
+    fontWeight: "500",
+  },
+  right: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    minWidth: 128,
+  },
+  price: { fontSize: 18, fontWeight: "800" },
+  changeText: {
+    marginTop: 5,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  sep: { height: 1 },
+  emptyContainer: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingBottom: 10,
+  },
+  emptyCard: {
+    borderWidth: 1,
+    borderRadius: 22,
+    paddingVertical: 28,
+    paddingHorizontal: 22,
+    alignItems: "center",
+  },
+  emptyTitle: {
+    fontSize: 19,
+    fontWeight: "800",
+    marginBottom: 8,
+  },
+  emptyText: {
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: "center",
+    maxWidth: 240,
+  },
+  addBtn: {
+    marginTop: 18,
+    paddingVertical: 15,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+  },
+  addPlus: { fontSize: 18, fontWeight: "700" },
   addText: { fontSize: 16, fontWeight: "800" },
 });

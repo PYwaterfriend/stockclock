@@ -6,9 +6,12 @@ import "react-native-reanimated";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { configureMarketDataPrefs } from "@/services/marketData";
 
-/** ---------------- Theme (app-level) ---------------- */
 export type ThemePref = "system" | "dark" | "light";
+export type DefaultChartRange = "1D" | "1W" | "1M" | "1Y";
+export type AutoRefreshSeconds = 0 | 15 | 30 | 60;
+export type NewsItemsPerStock = 3 | 5 | 10;
 
 export type ThemeColors = {
   bg: string;
@@ -46,7 +49,6 @@ export const unstable_settings = {
   anchor: "(tabs)",
 };
 
-/** ---------------- Watchlist ---------------- */
 type WatchlistCtx = {
   watchlist: string[];
   addSymbol: (sym: string) => void;
@@ -61,7 +63,6 @@ export const WatchlistContext = createContext<WatchlistCtx>({
   toggleSymbol: () => {},
 });
 
-/** ---------------- Alerts ---------------- */
 export type AlertRule = "ABOVE" | "BELOW";
 
 export type AlertItem = {
@@ -69,7 +70,7 @@ export type AlertItem = {
   symbol: string;
   rule: AlertRule;
   target: number;
-  createdAt: number; // Date.now()
+  createdAt: number;
   enabled: boolean;
 };
 
@@ -89,6 +90,32 @@ export const AlertsContext = createContext<AlertsCtx>({
   updateAlert: () => {},
 });
 
+export type AppSettings = {
+  smartDataMode: boolean;
+  useCachedDataWhenOffline: boolean;
+  defaultChartRange: DefaultChartRange;
+  autoRefreshSeconds: AutoRefreshSeconds;
+  newsItemsPerStock: NewsItemsPerStock;
+};
+
+type SettingsCtx = {
+  settings: AppSettings;
+  updateSettings: (patch: Partial<AppSettings>) => void;
+};
+
+const DEFAULT_SETTINGS: AppSettings = {
+  smartDataMode: true,
+  useCachedDataWhenOffline: true,
+  defaultChartRange: "1D",
+  autoRefreshSeconds: 0,
+  newsItemsPerStock: 5,
+};
+
+export const SettingsContext = createContext<SettingsCtx>({
+  settings: DEFAULT_SETTINGS,
+  updateSettings: () => {},
+});
+
 function makeId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -97,6 +124,7 @@ const STORAGE_KEYS = {
   watchlist: "stockclock_watchlist_v1",
   alerts: "stockclock_alerts_v1",
   themePref: "stockclock_theme_pref_v1",
+  appSettings: "stockclock_app_settings_v1",
 } as const;
 
 function safeParseJson<T>(raw: string | null): T | null {
@@ -128,17 +156,27 @@ function isAlertItemArray(x: unknown): x is AlertItem[] {
     )
   );
 }
+
+function isAppSettings(x: unknown): x is AppSettings {
+  return (
+    !!x &&
+    typeof x === "object" &&
+    typeof (x as any).smartDataMode === "boolean" &&
+    typeof (x as any).useCachedDataWhenOffline === "boolean" &&
+    ["1D", "1W", "1M", "1Y"].includes(String((x as any).defaultChartRange)) &&
+    [0, 15, 30, 60].includes(Number((x as any).autoRefreshSeconds)) &&
+    [3, 5, 10].includes(Number((x as any).newsItemsPerStock))
+  );
+}
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-
-  // Prevent auto-saving the default state before hydration completes.
   const hydratedRef = useRef(false);
 
-  /** theme preference (system/dark/light) */
   const [themePref, setThemePref] = useState<ThemePref>("system");
-
-  /** watchlist state */
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [watchlist, setWatchlist] = useState<string[]>(["AAPL", "TSLA", "NVDA"]);
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
 
   const addSymbol = (sym: string) => {
     const s = sym.trim().toUpperCase();
@@ -158,29 +196,26 @@ export default function RootLayout() {
     setWatchlist((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [s, ...prev]));
   };
 
-  const watchlistCtx = useMemo(
-    () => ({ watchlist, addSymbol, removeSymbol, toggleSymbol }),
-    [watchlist]
-  );
-
-  /** alerts state */
-  const [alerts, setAlerts] = useState<AlertItem[]>([]);
-
-  // Hydrate persisted state once.
   useEffect(() => {
     let canceled = false;
 
     (async () => {
       try {
-        const [wlRaw, alRaw] = await Promise.all([
+        const [wlRaw, alRaw, themeRaw, settingsRaw] = await Promise.all([
           AsyncStorage.getItem(STORAGE_KEYS.watchlist),
           AsyncStorage.getItem(STORAGE_KEYS.alerts),
+          AsyncStorage.getItem(STORAGE_KEYS.themePref),
+          AsyncStorage.getItem(STORAGE_KEYS.appSettings),
         ]);
 
-        const themeRaw = await AsyncStorage.getItem(STORAGE_KEYS.themePref);
         const themeParsed = safeParseJson<unknown>(themeRaw);
         if (!canceled && (themeParsed === "system" || themeParsed === "dark" || themeParsed === "light")) {
           setThemePref(themeParsed);
+        }
+
+        const settingsParsed = safeParseJson<unknown>(settingsRaw);
+        if (!canceled && isAppSettings(settingsParsed)) {
+          setSettings(settingsParsed);
         }
 
         const wlParsed = safeParseJson<unknown>(wlRaw);
@@ -206,7 +241,10 @@ export default function RootLayout() {
     };
   }, []);
 
-  // Persist on change.
+  useEffect(() => {
+    configureMarketDataPrefs({ smartDataMode: settings.smartDataMode });
+  }, [settings.smartDataMode]);
+
   useEffect(() => {
     if (!hydratedRef.current) return;
     AsyncStorage.setItem(STORAGE_KEYS.watchlist, JSON.stringify(watchlist)).catch(() => {});
@@ -221,6 +259,11 @@ export default function RootLayout() {
     if (!hydratedRef.current) return;
     AsyncStorage.setItem(STORAGE_KEYS.themePref, JSON.stringify(themePref)).catch(() => {});
   }, [themePref]);
+
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    AsyncStorage.setItem(STORAGE_KEYS.appSettings, JSON.stringify(settings)).catch(() => {});
+  }, [settings]);
 
   const addAlert = (a: Omit<AlertItem, "id" | "createdAt">) => {
     const id = makeId();
@@ -241,10 +284,9 @@ export default function RootLayout() {
     setAlerts((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
   };
 
-  const alertsCtx = useMemo(
-    () => ({ alerts, addAlert, removeAlert, toggleAlertEnabled, updateAlert }),
-    [alerts]
-  );
+  const updateSettings = (patch: Partial<AppSettings>) => {
+    setSettings((prev) => ({ ...prev, ...patch }));
+  };
 
   const resolvedScheme = themePref === "system" ? (colorScheme === "dark" ? "dark" : "light") : themePref;
   const colors: ThemeColors =
@@ -273,18 +315,35 @@ export default function RootLayout() {
     [themePref, resolvedScheme, colors]
   );
 
+  const watchlistCtx = useMemo(
+    () => ({ watchlist, addSymbol, removeSymbol, toggleSymbol }),
+    [watchlist]
+  );
+
+  const alertsCtx = useMemo(
+    () => ({ alerts, addAlert, removeAlert, toggleAlertEnabled, updateAlert }),
+    [alerts]
+  );
+
+  const settingsCtx = useMemo(
+    () => ({ settings, updateSettings }),
+    [settings]
+  );
+
   return (
     <ThemeContext.Provider value={themeCtx}>
-      <AlertsContext.Provider value={alertsCtx}>
-        <WatchlistContext.Provider value={watchlistCtx}>
-          <ThemeProvider value={resolvedScheme === "dark" ? DarkTheme : DefaultTheme}>
-            <Stack>
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            </Stack>
-            <StatusBar style={resolvedScheme === "dark" ? "light" : "dark"} />
-          </ThemeProvider>
-        </WatchlistContext.Provider>
-      </AlertsContext.Provider>
+      <SettingsContext.Provider value={settingsCtx}>
+        <AlertsContext.Provider value={alertsCtx}>
+          <WatchlistContext.Provider value={watchlistCtx}>
+            <ThemeProvider value={resolvedScheme === "dark" ? DarkTheme : DefaultTheme}>
+              <Stack>
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              </Stack>
+              <StatusBar style={resolvedScheme === "dark" ? "light" : "dark"} />
+            </ThemeProvider>
+          </WatchlistContext.Provider>
+        </AlertsContext.Provider>
+      </SettingsContext.Provider>
     </ThemeContext.Provider>
   );
 }

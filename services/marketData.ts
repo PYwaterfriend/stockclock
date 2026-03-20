@@ -1,6 +1,6 @@
 const API_BASE = "https://api.twelvedata.com";
 
-export const TWELVE_DATA_API_KEY = "API_HERE";
+export const TWELVE_DATA_API_KEY = "YOUR_API_KEY_HERE";
 
 const QUOTE_CACHE_TTL = 5 * 60 * 1000;
 const HISTORY_CACHE_TTL = 5 * 60 * 1000;
@@ -15,8 +15,15 @@ type HistoryCacheEntry = {
   fetchedAt: number;
 };
 
+type DataPrefs = {
+  smartDataMode: boolean;
+};
+
 const quoteCache: Record<string, QuoteCacheEntry> = {};
 const historyCache: Record<string, HistoryCacheEntry> = {};
+const dataPrefs: DataPrefs = {
+  smartDataMode: true,
+};
 
 export type QuoteData = {
   symbol: string;
@@ -29,6 +36,7 @@ export type QuoteData = {
   low?: number;
   previousClose?: number;
   volume?: number;
+  exchange?: string;
 };
 
 export type SearchResult = {
@@ -38,16 +46,28 @@ export type SearchResult = {
   type: string;
 };
 
+export type TimeRange =
+  | "1H"
+  | "4H"
+  | "6H"
+  | "8H"
+  | "12H"
+  | "1D"
+  | "5D"
+  | "1W"
+  | "2W"
+  | "1M"
+  | "3M"
+  | "6M"
+  | "1Y";
+
 export type TimePoint = {
   datetime: string;
   close: number;
 };
 
 function hasApiKey() {
-  return (
-    !!TWELVE_DATA_API_KEY &&
-    TWELVE_DATA_API_KEY !== "PASTE_YOUR_TWELVE_DATA_KEY_HERE"
-  );
+  return !!TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== "PASTE_YOUR_TWELVE_DATA_KEY_HERE";
 }
 
 function buildUrl(path: string, params: Record<string, string>) {
@@ -60,21 +80,55 @@ function asNumber(value: unknown, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function getNewYorkDate() {
+  return new Date(
+    new Date().toLocaleString("en-US", {
+      timeZone: "America/New_York",
+    })
+  );
+}
+
+function isUsEquityMarketOpenNow() {
+  const ny = getNewYorkDate();
+  const day = ny.getDay();
+
+  if (day === 0 || day === 6) return false;
+
+  const minutes = ny.getHours() * 60 + ny.getMinutes();
+  const open = 9 * 60 + 30;
+  const close = 16 * 60;
+
+  return minutes >= open && minutes < close;
+}
+
+function shouldReuseClosedMarketCache() {
+  return dataPrefs.smartDataMode && !isUsEquityMarketOpenNow();
+}
+
 async function readJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return (await res.json()) as T;
 }
 
-export async function fetchQuote(
-  symbol: string,
-  forceRefresh = false
-): Promise<QuoteData> {
+export function configureMarketDataPrefs(patch: Partial<DataPrefs>) {
+  Object.assign(dataPrefs, patch);
+}
+
+export function getMarketDataPrefs() {
+  return { ...dataPrefs };
+}
+
+export async function fetchQuote(symbol: string, forceRefresh = false): Promise<QuoteData> {
   const sym = symbol.trim().toUpperCase();
   const now = Date.now();
   const cached = quoteCache[sym];
 
   if (!forceRefresh && cached && now - cached.fetchedAt < QUOTE_CACHE_TTL) {
+    return cached.data;
+  }
+
+  if (!forceRefresh && cached && shouldReuseClosedMarketCache()) {
     return cached.data;
   }
 
@@ -104,6 +158,7 @@ export async function fetchQuote(
     low: asNumber(json?.low),
     previousClose: asNumber(json?.previous_close),
     volume: asNumber(json?.volume),
+    exchange: typeof json?.exchange === "string" ? json.exchange : undefined,
   };
 
   quoteCache[sym] = {
@@ -118,9 +173,7 @@ export async function fetchQuotes(
   symbols: string[],
   forceRefresh = false
 ): Promise<Record<string, QuoteData>> {
-  const clean = Array.from(
-    new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))
-  );
+  const clean = Array.from(new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean)));
 
   const pairs = await Promise.all(
     clean.map(async (symbol) => {
@@ -128,10 +181,7 @@ export async function fetchQuotes(
         const quote = await fetchQuote(symbol, forceRefresh);
         return [symbol, quote] as const;
       } catch {
-        return [
-          symbol,
-          { symbol, close: 0, change: 0, percentChange: 0 },
-        ] as const;
+        return [symbol, { symbol, close: 0, change: 0, percentChange: 0 }] as const;
       }
     })
   );
@@ -166,9 +216,7 @@ export async function searchSymbols(query: string): Promise<SearchResult[]> {
       }));
   }
 
-  const json = await readJson<any>(
-    buildUrl("/symbol_search", { symbol: q, outputsize: "12" })
-  );
+  const json = await readJson<any>(buildUrl("/symbol_search", { symbol: q, outputsize: "12" }));
   const items = Array.isArray(json?.data) ? json.data : [];
 
   return items
@@ -182,14 +230,30 @@ export async function searchSymbols(query: string): Promise<SearchResult[]> {
     .slice(0, 12);
 }
 
-function rangeConfig(range: "1D" | "1W" | "1M" | "6M" | "1Y") {
+function rangeConfig(range: TimeRange) {
   switch (range) {
+    case "1H":
+      return { interval: "5min", outputsize: "12" };
+    case "4H":
+      return { interval: "15min", outputsize: "16" };
+    case "6H":
+      return { interval: "30min", outputsize: "12" };
+    case "8H":
+      return { interval: "30min", outputsize: "16" };
+    case "12H":
+      return { interval: "1h", outputsize: "12" };
     case "1D":
-      return { interval: "1h", outputsize: "8" };
+      return { interval: "15min", outputsize: "32" };
+    case "5D":
+      return { interval: "1h", outputsize: "40" };
     case "1W":
-      return { interval: "1day", outputsize: "7" };
+      return { interval: "2h", outputsize: "42" };
+    case "2W":
+      return { interval: "4h", outputsize: "42" };
     case "1M":
       return { interval: "1day", outputsize: "30" };
+    case "3M":
+      return { interval: "1day", outputsize: "65" };
     case "6M":
       return { interval: "1week", outputsize: "26" };
     case "1Y":
@@ -197,16 +261,13 @@ function rangeConfig(range: "1D" | "1W" | "1M" | "6M" | "1Y") {
   }
 }
 
-function historyCacheKey(
-  symbol: string,
-  range: "1D" | "1W" | "1M" | "6M" | "1Y"
-) {
+function historyCacheKey(symbol: string, range: TimeRange) {
   return `${symbol.trim().toUpperCase()}__${range}`;
 }
 
 export async function fetchTimeSeries(
   symbol: string,
-  range: "1D" | "1W" | "1M" | "6M" | "1Y",
+  range: TimeRange,
   forceRefresh = false
 ): Promise<TimePoint[]> {
   const sym = symbol.trim().toUpperCase();
@@ -218,6 +279,10 @@ export async function fetchTimeSeries(
     return cached.data;
   }
 
+  if (!forceRefresh && cached && shouldReuseClosedMarketCache()) {
+    return cached.data;
+  }
+
   if (!hasApiKey()) {
     return [98, 101, 99, 105, 103, 107, 104, 108].map((close, idx) => ({
       datetime: `${idx}`,
@@ -226,16 +291,13 @@ export async function fetchTimeSeries(
   }
 
   const cfg = rangeConfig(range);
-  const json = await readJson<any>(
-    buildUrl("/time_series", { symbol: sym, ...cfg })
-  );
+  const json = await readJson<any>(buildUrl("/time_series", { symbol: sym, ...cfg }));
 
   if (json?.code || json?.status === "error") {
     throw new Error(json?.message || `History lookup failed for ${sym}`);
   }
 
   const values = Array.isArray(json?.values) ? json.values : [];
-
   const data = values
     .map((item: any) => ({
       datetime: String(item?.datetime || ""),
@@ -252,10 +314,7 @@ export async function fetchTimeSeries(
   return data;
 }
 
-export function clearHistoryCache(
-  symbol?: string,
-  range?: "1D" | "1W" | "1M" | "6M" | "1Y"
-) {
+export function clearHistoryCache(symbol?: string, range?: TimeRange) {
   if (symbol && range) {
     delete historyCache[historyCacheKey(symbol, range)];
     return;
@@ -284,4 +343,8 @@ export function formatVolume(value?: number) {
 
 export function hasConfiguredApiKey() {
   return hasApiKey();
+}
+
+export function isUsMarketOpen() {
+  return isUsEquityMarketOpenNow();
 }
