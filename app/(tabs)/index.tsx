@@ -10,13 +10,13 @@ import {
 import { useRouter } from "expo-router";
 import { AlertsContext, ThemeContext, WatchlistContext, type AlertItem } from "../_layout";
 
-type MarketPhase = "Closed" | "Pre-market" | "Open" | "After-hours";
+type MarketPhase = "Closed" | "Pre-market" | "Open" | "After-hours"; // 市场阶段类型，用于表示当前美股所处的交易状态
 
-function pad2(n: number) {
+function pad2(n: number) { // 将数字补齐为两位字符串，用于时间显示格式化
   return n < 10 ? `0${n}` : `${n}`;
 }
 
-function fmtHms(ms: number) {
+function fmtHms(ms: number) { // 将毫秒时间差转换为倒计时字符串，用于显示距离市场状态切换的剩余时间
   const s = Math.max(0, Math.floor(ms / 1000));
   const hh = Math.floor(s / 3600);
   const mm = Math.floor((s % 3600) / 60);
@@ -25,13 +25,7 @@ function fmtHms(ms: number) {
   return `${mm}:${pad2(ss)}`;
 }
 
-/**
- * US market hours in America/Los_Angeles, ignoring holidays (good enough for demo).
- * Pre: 01:00-06:30
- * Regular: 06:30-13:00
- * After: 13:00-17:00
- */
-function getUsMarketStatus(now: Date) {
+function getUsMarketStatus(now: Date) { // 根据当前时间计算美股市场状态，返回当前阶段，显示文本，以及下一次状态切换时间
   const day = now.getDay(); // 0=Sun, 6=Sat
   if (day === 0 || day === 6) {
     const daysToMon = day === 0 ? 1 : 2;
@@ -57,7 +51,6 @@ function getUsMarketStatus(now: Date) {
   if (mins >= regStart && mins < regEnd) return { phase: "Open" as MarketPhase, label: "Open", nextChangeAt: at(13, 0) };
   if (mins >= regEnd && mins < afterEnd) return { phase: "After-hours" as MarketPhase, label: "After-hours", nextChangeAt: at(17, 0) };
 
-  // Closed weekday
   const next = mins < preStart ? at(1, 0) : (() => {
     const d = new Date(now);
     d.setDate(now.getDate() + 1);
@@ -68,34 +61,39 @@ function getUsMarketStatus(now: Date) {
   return { phase: "Closed" as MarketPhase, label: "Closed", nextChangeAt: next };
 }
 
-function badgeForPhase(phase: MarketPhase) {
+// 根据市场阶段返回对应的标签样式，用于界面上显示当前市场状态
+function badgeForPhase(phase: MarketPhase) { 
   if (phase === "Open") return { bg: "rgba(52, 199, 89, 0.18)", text: "Open" };
   if (phase === "Pre-market") return { bg: "rgba(10, 132, 255, 0.18)", text: "Pre-market" };
   if (phase === "After-hours") return { bg: "rgba(255, 149, 0, 0.18)", text: "After-hours" };
   return { bg: "rgba(255, 255, 255, 0.10)", text: "Closed" };
 }
 
+// 将提醒规则转换为可读文本
 function fmtRule(rule: AlertItem["rule"]) {
   return rule === "ABOVE" ? "Above" : "Below";
 }
 
+// 首页组件
 export default function HomeScreen() {
-  const router = useRouter();
+  const router = useRouter(); // 获取路由控制、主题、自选股列表、提醒数据
   const { colors, resolvedScheme } = useContext(ThemeContext);
   const { watchlist } = useContext(WatchlistContext);
   const { alerts } = useContext(AlertsContext);
 
+  // 页面状态
   const [now, setNow] = useState(new Date());
   const [quickSymbol, setQuickSymbol] = useState("");
 
+  // 每秒更新一次当前时间，用于驱动倒计时和市场状态实时变化
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
 
-  const timeStr = useMemo(() => now.toLocaleString(), [now]);
+  const timeStr = useMemo(() => now.toLocaleString(), [now]); // 当前时间字符串，用于页面展示
 
-  const market = useMemo(() => getUsMarketStatus(now), [now]);
+  const market = useMemo(() => getUsMarketStatus(now), [now]); // 计算当前市场状态，标签样式，以及距离下次状态变化的倒计时
   const badge = useMemo(() => badgeForPhase(market.phase), [market.phase]);
   const countdown = useMemo(() => fmtHms(market.nextChangeAt.getTime() - now.getTime()), [market.nextChangeAt, now]);
 
@@ -103,6 +101,7 @@ export default function HomeScreen() {
   const recentAlerts = useMemo(() => alerts.slice(0, 2), [alerts]);
   const topWatch = useMemo(() => watchlist.slice(0, 6), [watchlist]);
 
+  // 创建提醒入口
   const onCreateAlert = (sym?: string) => {
     const s = (sym ?? quickSymbol).trim().toUpperCase();
     if (!s) return;
@@ -110,11 +109,11 @@ export default function HomeScreen() {
     router.push({ pathname: "/alert/create", params: { symbol: s } });
   };
 
+  // 页面整体结构
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
+        <View style={styles.header}> 
           <View>
             <Text style={[styles.appName, { color: colors.text }]}>StockClock</Text>
             <Text style={[styles.time, { color: colors.subtext }]}>{timeStr}</Text>
@@ -130,8 +129,7 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
-        {/* Market card */}
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}> 
           <View style={styles.cardRow}>
             <Text style={[styles.cardTitle, { color: colors.subtext }]}>Market</Text>
             <View style={[styles.badge, { backgroundColor: badge.bg }]}>
@@ -172,12 +170,11 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Quick create */}
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.cardTitle, { color: colors.subtext }]}>Quick alert</Text>
 
           <View style={styles.quickCreateRow}>
-            <TextInput
+            <TextInput // 股票代码输入框
               value={quickSymbol}
               onChangeText={setQuickSymbol}
               placeholder="Symbol (e.g. AAPL)"
@@ -203,7 +200,6 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        {/* Watchlist preview */}
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.cardRow}>
             <Text style={[styles.cardTitle, { color: colors.subtext }]}>Watchlist</Text>
@@ -229,7 +225,7 @@ export default function HomeScreen() {
           )}
 
           <View style={styles.subActionsRow}>
-            <Pressable
+            <Pressable // 单个股票标签
               style={[styles.linkBtn, { borderColor: colors.border }]}
               onPress={() => router.push("/(tabs)/explore")}
             >
@@ -237,9 +233,8 @@ export default function HomeScreen() {
             </Pressable>
           </View>
         </View>
-
-        {/* Alerts summary */}
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}> 
           <View style={styles.cardRow}>
             <Text style={[styles.cardTitle, { color: colors.subtext }]}>Alerts</Text>
             <Text style={[styles.meta, { color: colors.subtext }]}>{activeAlerts} active</Text>
@@ -277,7 +272,6 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Small footer note */}
         <View style={{ paddingHorizontal: 4, paddingTop: 2, paddingBottom: 28 }}>
           <Text style={[styles.footerNote, { color: colors.subtext }]}>
             Demo note: market hours ignore US holidays. Data is stored locally on device.
@@ -288,6 +282,7 @@ export default function HomeScreen() {
   );
 }
 
+// 样式集中定义区域
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 18, gap: 14 },
@@ -329,7 +324,7 @@ const styles = StyleSheet.create({
   actionBtnText: { fontSize: 14, fontWeight: "800" },
   actionBtnPrimary: { flex: 1, borderRadius: 12, paddingVertical: 12, alignItems: "center" },
   actionBtnPrimaryText: { fontSize: 14, fontWeight: "900" },
-
+  
   quickCreateRow: { flexDirection: "row", gap: 10, marginTop: 10, alignItems: "center" },
   input: {
     flex: 1,
@@ -377,6 +372,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   linkBtnText: { fontSize: 13, fontWeight: "800" },
-
+  
   footerNote: { fontSize: 12, lineHeight: 16, textAlign: "center" },
 });

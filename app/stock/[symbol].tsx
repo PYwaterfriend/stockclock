@@ -35,6 +35,7 @@ import {
 } from "../../services/marketData";
 import { SettingsContext, ThemeContext, WatchlistContext, type DefaultChartRange } from "../_layout";
 
+// 这是本地后端用的接口，重新联网可能需要更换
 const API_BASE = "http://192.168.1.226:8000";
 
 type TimeRange =
@@ -80,6 +81,7 @@ const rangeGroups: Array<{ key: RangeGroupKey; label: string; items: TimeRange[]
   { key: "M", label: "M", items: ["1M", "3M", "6M", "1Y"] },
 ];
 
+// 工具函数区
 function groupForRange(range: TimeRange | DefaultChartRange): RangeGroupKey {
   const found = rangeGroups.find((group) => group.items.includes(range as TimeRange));
   return found?.key ?? "D";
@@ -212,6 +214,7 @@ async function readCache<T>(key: string): Promise<CacheEnvelope<T> | null> {
   }
 }
 
+// 小型展示组件区
 function StatItem({
   label,
   value,
@@ -256,6 +259,7 @@ function PerformancePill({
   );
 }
 
+// 图表组件区
 function ChartLine({
   points,
   range,
@@ -556,6 +560,7 @@ function ChartLine({
   );
 }
 
+// 个股详情页主组件
 export default function StockDetailScreen() {
   const router = useRouter();
   const navigation = useNavigation();
@@ -594,6 +599,7 @@ export default function StockDetailScreen() {
     });
   }, [navigation, sym]);
 
+  // 数据加载函数区
   async function loadQuote(forceRefresh = false) {
     setLoadingQuote(true);
     try {
@@ -692,6 +698,7 @@ export default function StockDetailScreen() {
     } catch {}
   }
 
+  // 手动刷新入口
   async function handleManualRefresh() {
     setError("");
     setInfoMessages([]);
@@ -703,6 +710,7 @@ export default function StockDetailScreen() {
     ]);
   }
 
+  // 页面副作用逻辑区
   useEffect(() => {
     const initialRange = settings.defaultChartRange;
     setError("");
@@ -737,6 +745,7 @@ export default function StockDetailScreen() {
     return () => clearInterval(timer);
   }, [settings.autoRefreshSeconds, sym, selectedRange]);
 
+  // 页面展示数据整理区
   const currentPrice = quote?.close ?? 0;
   const change = quote?.change ?? 0;
   const pct = quote?.percentChange ?? 0;
@@ -748,12 +757,14 @@ export default function StockDetailScreen() {
   const subtitle = quote?.exchange ? `${quote.exchange} · ${sym}` : sym;
   const uniqueInfoMessages = Array.from(new Set(infoMessages));
 
+  // 外部链接打开逻辑
   const openLink = async (url: string) => {
     try {
       await WebBrowser.openBrowserAsync(url);
     } catch {}
   };
 
+  // 页面主体结构
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.bg }]}
@@ -776,19 +787,19 @@ export default function StockDetailScreen() {
         </Pressable>
       </View>
 
-      {!hasConfiguredApiKey() && (
+      {!hasConfiguredApiKey() && ( // API 配置提示区
         <View style={[styles.notice, { backgroundColor: colors.card, borderColor: colors.border }]}> 
           <Text style={[styles.noticeText, { color: colors.subtext }]}>Set your Twelve Data API key to replace demo fallback data.</Text>
         </View>
-      )}
+      )} 
 
-      <View style={styles.priceSection}>
+      <View style={styles.priceSection}> 
         <Text style={[styles.currentPrice, { color: colors.text }]}>{money(currentPrice)}</Text>
         <View style={styles.changeContainer}>
           <Text style={[styles.changeText, { color: up ? "#34c759" : colors.danger }]}>
-            {change >= 0 ? "+" : ""}
+            {change >= 0 ? "+" : ""} 
             {change.toFixed(2)}
-          </Text>
+          </Text> 
           <Text style={[styles.changeText, { color: up ? "#34c759" : colors.danger }]}>
             ({pct >= 0 ? "+" : ""}
             {pct.toFixed(2)}%)
@@ -870,7 +881,7 @@ export default function StockDetailScreen() {
         </View>
       </View>
 
-      <ChartLine
+      <ChartLine // 图表展示区
         points={pointsToShow}
         range={selectedRange}
         border={colors.border}
@@ -985,6 +996,7 @@ export default function StockDetailScreen() {
   );
 }
 
+// 样式定义区
 const styles = StyleSheet.create({
   container: { flex: 1 },
   contentContainer: { padding: 20, paddingTop: 28, paddingBottom: 40 },

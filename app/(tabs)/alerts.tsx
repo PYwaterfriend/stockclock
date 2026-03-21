@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";  
 import {
   Animated,
   Easing,
@@ -13,12 +13,14 @@ import {
   type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AlertsContext, ThemeContext, type AlertItem } from "../_layout";
+import { AlertsContext, ThemeContext, type AlertItem } from "../_layout";  // 引入当前页面需要的路由, React hooks, React Native 组件,屏幕安全区信息，以及全局的提醒数据和主题配置
 
+// 将提醒规则从内部值转换为界面上显示的文字, ABOVE 显示为 Above，其他情况显示为 Below
 function fmtRule(rule: AlertItem["rule"]) {
   return rule === "ABOVE" ? "Above" : "Below";
 }
 
+// 把时间戳转换成相对时间文本，供界面显示“几秒前 / 几分钟前 / 几小时前 / 几天前”
 function relTime(ts: number) {
   const diff = Date.now() - ts;
   const s = Math.floor(diff / 1000);
@@ -31,6 +33,7 @@ function relTime(ts: number) {
   return `${d}d ago`;
 }
 
+// 自定义搜索图标组件
 function SearchIcon({ color }: { color: string }) {
   return (
     <View style={styles.searchIcon}>
@@ -40,6 +43,7 @@ function SearchIcon({ color }: { color: string }) {
   );
 }
 
+// 自定义加号图标组件，用于“Add”按钮
 function PlusIcon({ color }: { color: string }) {
   return (
     <View style={styles.plusIcon}>
@@ -49,6 +53,7 @@ function PlusIcon({ color }: { color: string }) {
   );
 }
 
+// 自定义铃铛图标组件，表示提醒功能
 function BellIcon({ color }: { color: string }) {
   return (
     <View style={styles.bellIcon}>
@@ -58,6 +63,7 @@ function BellIcon({ color }: { color: string }) {
   );
 }
 
+// 通用开关组件，用来切换提醒启用/禁用状态
 function ToggleSwitch({
   enabled,
   onToggle,
@@ -91,6 +97,7 @@ function ToggleSwitch({
   );
 }
 
+// 演示模式下的顶部提示框组件
 function DemoToast({
   visible,
   title,
@@ -108,6 +115,7 @@ function DemoToast({
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.98)).current;
 
+  // 控制提示框显示和隐藏时的位移、透明度、缩放动画
   useEffect(() => {
     if (visible) {
       Animated.parallel([
@@ -154,6 +162,7 @@ function DemoToast({
     }
   }, [visible, opacity, scale, translateY]);
 
+  // 如果当前不显示提示框，直接不渲染
   if (!visible) return null;
 
   return (
@@ -177,6 +186,7 @@ function DemoToast({
   );
 }
 
+// 单个提醒卡片组件,负责展示股票代码、触发条件、更新时间，以及编辑、删除、测试触发等操作
 function AlertCard({
   alert,
   onToggle,
@@ -198,11 +208,13 @@ function AlertCard({
   colors: { card: string; border: string; text: string; subtext: string; tint: string; danger: string };
   scheme: "dark" | "light";
 }) {
+  // 根据提醒规则决定卡片中显示的文字和颜色,ABOVE 用绿色表示，BELOW 用橙色表示，方便用户快速区分提醒方向
   const conditionText = fmtRule(alert.rule);
   const conditionColor = alert.rule === "ABOVE" ? "#34c759" : "#ff9500";
   const sub = scheme === "dark" ? "rgba(255,255,255,0.35)" : "rgba(17,24,39,0.55)";
 
   return (
+    // 外层整个卡片可点击，点击后进入该提醒的编辑页面
     <Pressable style={styles.alertCardPress} onPress={onEdit}>
       <View
         style={[
@@ -223,7 +235,7 @@ function AlertCard({
             </View>
           </View>
 
-          <ToggleSwitch
+          <ToggleSwitch // 提醒开关区域，用于快速启用或停用当前提醒，不需要进入编辑页
             enabled={alert.enabled}
             onToggle={() => onToggle()}
             tint={conditionColor}
@@ -245,7 +257,7 @@ function AlertCard({
 
         <View style={styles.cardFooter}>
           <View style={styles.footerActions}>
-            {demoMode && (
+            {demoMode && ( // 演示模式打开时，额外显示Test Trigger按钮，方便课堂演示提醒触发流程
               <Pressable
                 style={[
                   styles.editButton,
@@ -289,6 +301,7 @@ function AlertCard({
   );
 }
 
+// 空状态组件,当当前没有任何提醒时，显示引导文案和创建第一个提醒的按钮
 function EmptyState({
   onCreateAlert,
   scheme,
@@ -326,16 +339,18 @@ function EmptyState({
   );
 }
 
+// Alerts 页面主组件,管理提醒列表、搜索、创建弹窗、演示模式、测试提醒记录等页面级状态
 export default function AlertsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { alerts, toggleAlertEnabled, removeAlert } = useContext(AlertsContext);
+  const { alerts, toggleAlertEnabled, removeAlert } = useContext(AlertsContext); // 从全局上下文中读取提醒数据和主题信息,这样页面能拿到当前所有提醒,以及深色/浅色模式的配色
   const { colors, resolvedScheme } = useContext(ThemeContext);
 
-  const [searchQuery, setSearchQuery] = useState("");
+  // 页面内部状态
+  const [searchQuery, setSearchQuery] = useState(""); //控制搜索输入，showAdd 控制创建弹窗显示
   const [showAdd, setShowAdd] = useState(false);
-  const [draftSymbol, setDraftSymbol] = useState("");
-  const [demoMode, setDemoMode] = useState(true);
+  const [draftSymbol, setDraftSymbol] = useState(""); //暂存新建提醒时输入的股票代码
+  const [demoMode, setDemoMode] = useState(true); //控制课堂演示模式，demoToast 控制顶部提示框
   const [demoToast, setDemoToast] = useState<{
     visible: boolean;
     title: string;
@@ -345,8 +360,9 @@ export default function AlertsScreen() {
     title: "",
     body: "",
   });
-  const [demoHistory, setDemoHistory] = useState<Record<string, number>>({});
+  const [demoHistory, setDemoHistory] = useState<Record<string, number>>({}); //记录每个提醒最近一次测试触发时间
 
+  // 顶部演示提示框在显示一段时间后自动关闭，避免一直停留在界面上
   useEffect(() => {
     if (!demoToast.visible) return;
     const timer = setTimeout(() => {
@@ -355,12 +371,14 @@ export default function AlertsScreen() {
     return () => clearTimeout(timer);
   }, [demoToast.visible]);
 
+  // 根据搜索关键词筛选提醒列表
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toUpperCase();
     if (!q) return alerts;
     return alerts.filter((a) => a.symbol.includes(q));
   }, [alerts, searchQuery]);
 
+  // 打开“创建提醒”流程
   const openCreate = (sym?: string) => {
     const s = (sym ?? "").trim().toUpperCase();
     setShowAdd(false);
@@ -368,6 +386,7 @@ export default function AlertsScreen() {
     router.push({ pathname: "/alert/create", params: { symbol: s } });
   };
 
+  // 模拟一次提醒触发，用于课堂演示
   function triggerDemoAlert(alert: AlertItem) {
     const action = alert.rule === "ABOVE" ? "rose above" : "fell below";
     const simulatedPrice =
@@ -387,12 +406,14 @@ export default function AlertsScreen() {
     });
   }
 
+  // 根据当前明暗主题动态生成输入框占位色、图标颜色和搜索框背景色
   const placeholder =
     resolvedScheme === "dark" ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.35)";
   const icon = resolvedScheme === "dark" ? "rgba(255,255,255,0.40)" : "rgba(0,0,0,0.40)";
   const searchBg =
     resolvedScheme === "dark" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
 
+  // 页面根布局
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
       <DemoToast
@@ -403,7 +424,7 @@ export default function AlertsScreen() {
         colors={colors}
       />
 
-      <View style={styles.header}>
+      <View style={styles.header}> 
         <Text style={[styles.title, { color: colors.text }]}>Alerts</Text>
         <View style={styles.headerActions}>
           <Pressable
@@ -437,7 +458,7 @@ export default function AlertsScreen() {
       </View>
 
       {demoMode && (
-        <View
+        <View // 演示模式说明卡片
           style={[
             styles.demoHintCard,
             { backgroundColor: colors.card, borderColor: colors.border },
@@ -452,9 +473,9 @@ export default function AlertsScreen() {
         </View>
       )}
 
-      <View style={[styles.searchContainer, { backgroundColor: searchBg }]}>
-        <SearchIcon color={icon} />
-        <TextInput
+      <View style={[styles.searchContainer, { backgroundColor: searchBg }]}> 
+        <SearchIcon color={icon} /> 
+        <TextInput // 搜索栏区域
           style={[styles.searchInput, { color: colors.text }]}
           placeholder="Search by symbol..."
           placeholderTextColor={placeholder}
@@ -469,7 +490,7 @@ export default function AlertsScreen() {
         )}
       </View>
 
-      {filtered.length === 0 ? (
+      {filtered.length === 0 ? ( // 如果筛选后没有提醒,则显示空状态,否则显示提醒列表
         <EmptyState onCreateAlert={() => setShowAdd(true)} scheme={resolvedScheme} />
       ) : (
         <ScrollView
@@ -477,7 +498,7 @@ export default function AlertsScreen() {
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
         >
-          {filtered.map((a) => (
+          {filtered.map((a) => ( // 遍历渲染每一条提醒卡片
             <AlertCard
               key={a.id}
               alert={a}
@@ -494,7 +515,7 @@ export default function AlertsScreen() {
         </ScrollView>
       )}
 
-      {showAdd && (
+      {showAdd && ( // 新建提醒弹窗
         <Pressable
           style={[
             styles.modalOverlay,
@@ -563,6 +584,7 @@ export default function AlertsScreen() {
   );
 }
 
+// 样式集中定义区
 const styles = StyleSheet.create({
   container: { flex: 1, paddingTop: 60 } as ViewStyle,
 
@@ -593,7 +615,7 @@ const styles = StyleSheet.create({
     gap: 8,
   } as ViewStyle,
   addButtonText: { fontSize: 16, fontWeight: "600" } as TextStyle,
-
+  
   demoHintCard: {
     marginHorizontal: 20,
     marginBottom: 14,

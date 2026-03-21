@@ -8,6 +8,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { configureMarketDataPrefs } from "@/services/marketData";
 
+// 全局类型定义区
 export type ThemePref = "system" | "dark" | "light";
 export type DefaultChartRange = "1D" | "1W" | "1M" | "1Y";
 export type AutoRefreshSeconds = 0 | 15 | 30 | 60;
@@ -30,6 +31,7 @@ type ThemeCtx = {
   colors: ThemeColors;
 };
 
+// 主题上下文
 export const ThemeContext = createContext<ThemeCtx>({
   themePref: "system",
   setThemePref: () => {},
@@ -56,6 +58,7 @@ type WatchlistCtx = {
   toggleSymbol: (sym: string) => void;
 };
 
+// 自选股上下文
 export const WatchlistContext = createContext<WatchlistCtx>({
   watchlist: [],
   addSymbol: () => {},
@@ -82,6 +85,7 @@ type AlertsCtx = {
   updateAlert: (id: string, patch: Partial<Omit<AlertItem, "id" | "createdAt">>) => void;
 };
 
+// 提醒上下文
 export const AlertsContext = createContext<AlertsCtx>({
   alerts: [],
   addAlert: () => "",
@@ -111,15 +115,18 @@ const DEFAULT_SETTINGS: AppSettings = {
   newsItemsPerStock: 5,
 };
 
+// 应用设置上下文
 export const SettingsContext = createContext<SettingsCtx>({
   settings: DEFAULT_SETTINGS,
   updateSettings: () => {},
 });
 
+// 生成唯一ID，用于标识每一条提醒数据
 function makeId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// 本地存储 key 定义
 const STORAGE_KEYS = {
   watchlist: "stockclock_watchlist_v1",
   alerts: "stockclock_alerts_v1",
@@ -127,7 +134,8 @@ const STORAGE_KEYS = {
   appSettings: "stockclock_app_settings_v1",
 } as const;
 
-function safeParseJson<T>(raw: string | null): T | null {
+// 解析JSON
+function parseJson<T>(raw: string | null): T | null {
   if (!raw) return null;
   try {
     return JSON.parse(raw) as T;
@@ -136,6 +144,7 @@ function safeParseJson<T>(raw: string | null): T | null {
   }
 }
 
+// 数据结构校验函数
 function isStringArray(x: unknown): x is string[] {
   return Array.isArray(x) && x.every((v) => typeof v === "string");
 }
@@ -169,6 +178,7 @@ function isAppSettings(x: unknown): x is AppSettings {
   );
 }
 
+// 应用根布局组件
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const hydratedRef = useRef(false);
@@ -178,6 +188,7 @@ export default function RootLayout() {
   const [watchlist, setWatchlist] = useState<string[]>(["AAPL", "TSLA", "NVDA"]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
 
+  // 自选股操作方法
   const addSymbol = (sym: string) => {
     const s = sym.trim().toUpperCase();
     if (!s) return;
@@ -208,22 +219,22 @@ export default function RootLayout() {
           AsyncStorage.getItem(STORAGE_KEYS.appSettings),
         ]);
 
-        const themeParsed = safeParseJson<unknown>(themeRaw);
+        const themeParsed = parseJson<unknown>(themeRaw);
         if (!canceled && (themeParsed === "system" || themeParsed === "dark" || themeParsed === "light")) {
           setThemePref(themeParsed);
         }
 
-        const settingsParsed = safeParseJson<unknown>(settingsRaw);
+        const settingsParsed = parseJson<unknown>(settingsRaw);
         if (!canceled && isAppSettings(settingsParsed)) {
           setSettings(settingsParsed);
         }
 
-        const wlParsed = safeParseJson<unknown>(wlRaw);
+        const wlParsed = parseJson<unknown>(wlRaw);
         if (!canceled && isStringArray(wlParsed) && wlParsed.length > 0) {
           setWatchlist(wlParsed.map((s) => s.trim().toUpperCase()).filter(Boolean));
         }
 
-        const alParsed = safeParseJson<unknown>(alRaw);
+        const alParsed = parseJson<unknown>(alRaw);
         if (!canceled && isAlertItemArray(alParsed)) {
           setAlerts(
             alParsed
@@ -265,6 +276,7 @@ export default function RootLayout() {
     AsyncStorage.setItem(STORAGE_KEYS.appSettings, JSON.stringify(settings)).catch(() => {});
   }, [settings]);
 
+  // 提醒相关操作
   const addAlert = (a: Omit<AlertItem, "id" | "createdAt">) => {
     const id = makeId();
     const item: AlertItem = { ...a, id, createdAt: Date.now() };
@@ -284,6 +296,7 @@ export default function RootLayout() {
     setAlerts((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
   };
 
+  // 更新应用设置
   const updateSettings = (patch: Partial<AppSettings>) => {
     setSettings((prev) => ({ ...prev, ...patch }));
   };
@@ -330,6 +343,7 @@ export default function RootLayout() {
     [settings]
   );
 
+  // 应用根结构
   return (
     <ThemeContext.Provider value={themeCtx}>
       <SettingsContext.Provider value={settingsCtx}>

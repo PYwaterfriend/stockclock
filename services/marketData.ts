@@ -1,10 +1,11 @@
-const API_BASE = "https://api.twelvedata.com";
+const API_BASE = "https://api.twelvedata.com"; //获取股票信息的api网站
 
-export const TWELVE_DATA_API_KEY = "YOUR_API_KEY_HERE";
+export const TWELVE_DATA_API_KEY = "YOUR_API_KEY_HERE"; //api写这里
 
 const QUOTE_CACHE_TTL = 5 * 60 * 1000;
 const HISTORY_CACHE_TTL = 5 * 60 * 1000;
 
+// 本地内存缓存结构
 type QuoteCacheEntry = {
   data: QuoteData;
   fetchedAt: number;
@@ -19,12 +20,14 @@ type DataPrefs = {
   smartDataMode: boolean;
 };
 
+// 全局缓存对象和数据策略
 const quoteCache: Record<string, QuoteCacheEntry> = {};
 const historyCache: Record<string, HistoryCacheEntry> = {};
 const dataPrefs: DataPrefs = {
   smartDataMode: true,
 };
 
+// 行情相关数据结构
 export type QuoteData = {
   symbol: string;
   name?: string;
@@ -66,6 +69,7 @@ export type TimePoint = {
   close: number;
 };
 
+// 检查是否已经有了有效的api key
 function hasApiKey() {
   return !!TWELVE_DATA_API_KEY && TWELVE_DATA_API_KEY !== "PASTE_YOUR_TWELVE_DATA_KEY_HERE";
 }
@@ -75,6 +79,7 @@ function buildUrl(path: string, params: Record<string, string>) {
   return `${API_BASE}${path}?${qs.toString()}`;
 }
 
+// 工具函数
 function asNumber(value: unknown, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -88,6 +93,7 @@ function getNewYorkDate() {
   );
 }
 
+// 判断当前是否为美股正常交易时间
 function isUsEquityMarketOpenNow() {
   const ny = getNewYorkDate();
   const day = ny.getDay();
@@ -105,12 +111,14 @@ function shouldReuseClosedMarketCache() {
   return dataPrefs.smartDataMode && !isUsEquityMarketOpenNow();
 }
 
+// 通用 HTTP 请求函数
 async function readJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return (await res.json()) as T;
 }
 
+// 数据策略配置接口
 export function configureMarketDataPrefs(patch: Partial<DataPrefs>) {
   Object.assign(dataPrefs, patch);
 }
@@ -119,6 +127,7 @@ export function getMarketDataPrefs() {
   return { ...dataPrefs };
 }
 
+// 获取单个股票报价
 export async function fetchQuote(symbol: string, forceRefresh = false): Promise<QuoteData> {
   const sym = symbol.trim().toUpperCase();
   const now = Date.now();
@@ -169,6 +178,7 @@ export async function fetchQuote(symbol: string, forceRefresh = false): Promise<
   return data;
 }
 
+// 批量获取多个股票报价
 export async function fetchQuotes(
   symbols: string[],
   forceRefresh = false
@@ -189,6 +199,7 @@ export async function fetchQuotes(
   return Object.fromEntries(pairs);
 }
 
+// 清除报价缓存
 export function clearQuoteCache(symbol?: string) {
   if (symbol) {
     delete quoteCache[symbol.trim().toUpperCase()];
@@ -200,6 +211,7 @@ export function clearQuoteCache(symbol?: string) {
   });
 }
 
+// 股票搜索接口
 export async function searchSymbols(query: string): Promise<SearchResult[]> {
   const q = query.trim();
   if (!q) return [];
@@ -230,6 +242,7 @@ export async function searchSymbols(query: string): Promise<SearchResult[]> {
     .slice(0, 12);
 }
 
+// 不同时间范围对应的接口参数配置
 function rangeConfig(range: TimeRange) {
   switch (range) {
     case "1H":
@@ -261,10 +274,12 @@ function rangeConfig(range: TimeRange) {
   }
 }
 
+// 生成历史数据缓存key
 function historyCacheKey(symbol: string, range: TimeRange) {
   return `${symbol.trim().toUpperCase()}__${range}`;
 }
 
+// 获取股票历史时间序列数据
 export async function fetchTimeSeries(
   symbol: string,
   range: TimeRange,
@@ -314,6 +329,7 @@ export async function fetchTimeSeries(
   return data;
 }
 
+// 清除历史数据缓存
 export function clearHistoryCache(symbol?: string, range?: TimeRange) {
   if (symbol && range) {
     delete historyCache[historyCacheKey(symbol, range)];
@@ -333,6 +349,7 @@ export function clearHistoryCache(symbol?: string, range?: TimeRange) {
   });
 }
 
+// 成交量格式化
 export function formatVolume(value?: number) {
   if (!value || value <= 0) return "-";
   if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
@@ -341,10 +358,12 @@ export function formatVolume(value?: number) {
   return `${Math.round(value)}`;
 }
 
+// 用于判断api是否已配置
 export function hasConfiguredApiKey() {
   return hasApiKey();
 }
 
+// 用于判断当前市场是否开盘
 export function isUsMarketOpen() {
   return isUsEquityMarketOpenNow();
 }

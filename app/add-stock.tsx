@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { ThemeContext, WatchlistContext } from "./_layout";
 import { hasConfiguredApiKey, searchSymbols, type SearchResult } from "../services/marketData";
 
+// 添加股票页面主组件
 export default function AddStockScreen() {
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -13,34 +14,38 @@ export default function AddStockScreen() {
   const { addSymbol } = useContext(WatchlistContext);
   const { colors, resolvedScheme } = useContext(ThemeContext);
 
+  // 监听搜索框输入变化，并在用户停止输入一小段时间后发起搜索
   useEffect(() => {
     let active = true;
     const handle = setTimeout(async () => {
       const term = q.trim();
-      if (!term) {
+      if (!term) { // 如果搜索框为空，就清空结果和错误信息，不发起搜索
         setResults([]);
         setError("");
         return;
       }
 
+      // 开始一次新的股票搜索
       setLoading(true);
       setError("");
       try {
-        const next = await searchSymbols(term);
+        const next = await searchSymbols(term); // 调用股票搜索服务，获取匹配当前关键词的候选结果
         if (active) setResults(next);
-      } catch (err) {
+      } catch (err) { // 搜索失败时，记录错误信息并显示在页面上
         if (active) setError(err instanceof Error ? err.message : "Search failed.");
       } finally {
         if (active) setLoading(false);
       }
     }, 350);
 
+    // 清理上一次延迟搜索任务
     return () => {
       active = false;
       clearTimeout(handle);
     };
   }, [q]);
 
+  // 页面主体
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
       <Text style={[styles.title, { color: colors.text }]}>Add Stock</Text>
@@ -51,7 +56,7 @@ export default function AddStockScreen() {
         </View>
       )}
 
-      <TextInput
+      <TextInput // 股票搜索输入框
         style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card }]}
         value={q}
         onChangeText={setQ}
@@ -61,10 +66,10 @@ export default function AddStockScreen() {
         autoCorrect={false}
       />
 
-      {!!error && <Text style={[styles.error, { color: colors.danger }]}>{error}</Text>}
+      {!!error && <Text style={[styles.error, { color: colors.danger }]}>{error}</Text>} 
       {loading && <Text style={[styles.loading, { color: colors.subtext }]}>Searching...</Text>}
 
-      <FlatList
+      <FlatList  // 搜索结果列表
         data={results}
         keyExtractor={(x) => `${x.symbol}-${x.exchange}`}
         ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
@@ -81,7 +86,7 @@ export default function AddStockScreen() {
             <Text style={[styles.hint, { color: colors.subtext }]}>{item.exchange || item.type || "Tap to add"}</Text>
           </Pressable>
         )}
-        ListEmptyComponent={
+        ListEmptyComponent={ // 当没有搜索结果时，显示空状态提示
           <Text style={[styles.empty, { color: colors.subtext }]}>
             {q.trim() ? "No results" : "Start typing to search."}
           </Text>
@@ -91,6 +96,7 @@ export default function AddStockScreen() {
   );
 }
 
+// 样式定义区
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, paddingTop: 60 },
   title: { fontSize: 28, fontWeight: "800", marginBottom: 14 },

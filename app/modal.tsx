@@ -27,3 +27,5 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
   },
 });
+
+// 简单的模态页面示例，用于展示一个弹窗界面，并提供返回首页的入口

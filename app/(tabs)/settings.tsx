@@ -18,8 +18,9 @@ import {
   type ThemePref,
 } from "../_layout";
 
+// 通用分区组件，用于渲染每个分组的标题和卡片
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  const { colors } = useContext(ThemeContext);
+  const { colors } = useContext(ThemeContext); // 读取当前主题颜色
   return (
     <View style={styles.sectionWrap}>
       <Text style={[styles.sectionTitle, { color: colors.subtext }]}>{title}</Text>
@@ -30,12 +31,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+// 主题选项行组件
 function ThemeOptionRow({ title, desc, value }: { title: string; desc: string; value: ThemePref }) {
   const { themePref, setThemePref, colors } = useContext(ThemeContext);
-  const active = themePref === value;
+  const active = themePref === value; // 判断当前这一项是否为已选中的主题模式
 
   return (
-    <Pressable
+    <Pressable // 点击整行后切换主题偏好
       style={[styles.row, styles.rowSpaced, active && { backgroundColor: `${colors.tint}10` }]}
       onPress={() => setThemePref(value)}
     >
@@ -43,7 +45,7 @@ function ThemeOptionRow({ title, desc, value }: { title: string; desc: string; v
         <Text style={[styles.rowTitle, { color: colors.text }]}>{title}</Text>
         <Text style={[styles.rowDesc, { color: colors.subtext }]}>{desc}</Text>
       </View>
-      <View
+      <View // 右侧圆形标记用于显示当前主题项是否被选中
         style={[
           styles.check,
           { borderColor: active ? colors.tint : colors.border, backgroundColor: active ? `${colors.tint}22` : "transparent" },
@@ -55,6 +57,7 @@ function ThemeOptionRow({ title, desc, value }: { title: string; desc: string; v
   );
 }
 
+// 开关设置行组件
 function ToggleRow({
   title,
   desc,
@@ -68,9 +71,9 @@ function ToggleRow({
 }) {
   const { colors } = useContext(ThemeContext);
 
-  return (
+  return ( // 左侧显示该设置项的标题和功能说明
     <View style={[styles.row, styles.rowSpaced]}>
-      <View style={{ flex: 1, paddingRight: 12 }}>
+      <View style={{ flex: 1, paddingRight: 12 }}> 
         <Text style={[styles.rowTitle, { color: colors.text }]}>{title}</Text>
         <Text style={[styles.rowDesc, { color: colors.subtext }]}>{desc}</Text>
       </View>
@@ -79,6 +82,7 @@ function ToggleRow({
   );
 }
 
+// 分段选择组件
 function SegmentRow<T extends string | number>({
   title,
   desc,
@@ -99,10 +103,10 @@ function SegmentRow<T extends string | number>({
       <Text style={[styles.rowTitle, { color: colors.text }]}>{title}</Text>
       <Text style={[styles.rowDesc, { color: colors.subtext }]}>{desc}</Text>
       <View style={styles.segmentWrap}>
-        {options.map((option) => {
-          const active = option.value === value;
+        {options.map((option) => { // 遍历渲染所有候选
+          const active = option.value === value; // 判断当前按钮是否为选中状态
           return (
-            <Pressable
+            <Pressable // 单个可选按钮
               key={String(option.value)}
               style={[
                 styles.segmentBtn,
@@ -122,35 +126,37 @@ function SegmentRow<T extends string | number>({
   );
 }
 
+// 设置页面主组件，包括展示主题，数据，默认图表和新闻
 export default function SettingsScreen() {
   const { resolvedScheme, colors } = useContext(ThemeContext);
   const { settings, updateSettings } = useContext(SettingsContext);
 
+  // 页面主体
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.bg }]} contentContainerStyle={styles.contentContainer}>
       <Text style={[styles.title, { color: colors.text }]}>Settings</Text>
       <Text style={[styles.subtitle, { color: colors.subtext }]}>Tune visuals, chart defaults, and API behavior for demos.</Text>
 
-      <Section title="Appearance">
+      <Section title="Appearance"> 
         <ThemeOptionRow title="System" desc={`Follow device appearance. Current: ${resolvedScheme}`} value="system" />
         <ThemeOptionRow title="Dark" desc="Always use dark UI" value="dark" />
         <ThemeOptionRow title="Light" desc="Always use light UI" value="light" />
       </Section>
 
-      <Section title="Data & API">
-        <ToggleRow
+      <Section title="Data & API"> 
+        <ToggleRow // 智能数据模式
           title="Smart Data Mode"
           desc="Reuse saved market data after U.S. market close to reduce API calls."
           value={settings.smartDataMode}
           onChange={(smartDataMode) => updateSettings({ smartDataMode })}
         />
-        <ToggleRow
+        <ToggleRow // 离线缓存回退开关
           title="Use Cached Data When Offline"
           desc="Fall back to saved quote, chart, and news data when refresh fails."
           value={settings.useCachedDataWhenOffline}
           onChange={(useCachedDataWhenOffline) => updateSettings({ useCachedDataWhenOffline })}
         />
-        <SegmentRow<AutoRefreshSeconds>
+        <SegmentRow<AutoRefreshSeconds> // 自动刷新设置
           title="Auto Refresh"
           desc="How often the stock detail page refreshes live data."
           value={settings.autoRefreshSeconds}
@@ -164,8 +170,8 @@ export default function SettingsScreen() {
         />
       </Section>
 
-      <Section title="Charts">
-        <SegmentRow<DefaultChartRange>
+      <Section title="Charts"> 
+        <SegmentRow<DefaultChartRange>  // 默认图表周期设置
           title="Default Chart Range"
           desc="Initial chart timeframe when opening a stock detail page."
           value={settings.defaultChartRange}
@@ -179,11 +185,11 @@ export default function SettingsScreen() {
         />
       </Section>
 
-      <Section title="News">
+      <Section title="News"> 
         <SegmentRow<NewsItemsPerStock>
           title="News Items Per Stock"
           desc="How many recent articles to show for each stock."
-          value={settings.newsItemsPerStock}
+          value={settings.newsItemsPerStock} // 每只股票的新闻条数设置
           options={[
             { label: "3", value: 3 },
             { label: "5", value: 5 },
@@ -196,6 +202,7 @@ export default function SettingsScreen() {
   );
 }
 
+// 样式定义区
 const styles = StyleSheet.create({
   container: { flex: 1 } as ViewStyle,
   contentContainer: { padding: 20, paddingTop: 56, paddingBottom: 40 } as ViewStyle,
